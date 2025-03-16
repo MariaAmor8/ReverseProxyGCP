@@ -54,8 +54,8 @@ resources:
           sudo apt install python3-pip -y
           sudo mkdir /labs
           cd /labs
-          sudo git clone https://github.com/ISIS2503/ISIS2503-MonitoringApp-Auth0.git
-          cd ISIS2503-MonitoringApp-Auth0
+          sudo git clone https://github.com/MariaAmor8/ReverseProxyGCP.git
+          cd ReverseProxyGCP
           sudo pip3 install -r requirements.txt
 
 # App server instance
@@ -89,6 +89,6 @@ resources:
           sudo apt install python3-pip -y
           sudo mkdir /labs
           cd /labs
-          sudo git clone https://github.com/ISIS2503/ISIS2503-MonitoringApp-Auth0.git
-          cd ISIS2503-MonitoringApp-Auth0
+          sudo git clone https://github.com/MariaAmor8/ReverseProxyGCP.git
+          cd ReverseProxyGCP
           sudo pip3 install -r requirements.txt
