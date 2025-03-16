@@ -36,5 +36,4 @@ async def proxy(full_path: str, request: Request):
 
 if __name__ == "__main__":
     # Se inicia el proxy en 0.0.0.0 para aceptar tráfico externo
-    uvicorn.run(app, host="0.0.0.0", port=443, ssl_keyfile="privkey.pem", ssl_certfile="fullchain.pem")
-
+    uvicorn.run(app, host="0.0.0.0", port=8080)
