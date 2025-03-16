@@ -3,8 +3,8 @@ import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import Response
 
-# Configuración del backend al que el proxy redirige las solicitudes
-BACKEND_URL = "http://10.128.0.63:8080"  # Dirección interna del app-server en GCP
+# Nombre interno de la instancia app-server en GCP
+BACKEND_URL = "http://app-server.c.arquisoft-2023-9878.internal:8080"
 
 app = FastAPI()
 
@@ -35,5 +35,4 @@ async def proxy(full_path: str, request: Request):
         return Response(content=response.content, status_code=response.status_code, headers=dict(response.headers))
 
 if __name__ == "__main__":
-    # Se inicia el proxy en 0.0.0.0 para aceptar tráfico externo
     uvicorn.run(app, host="0.0.0.0", port=8080)
