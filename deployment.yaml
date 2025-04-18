@@ -61,21 +61,10 @@ resources:
             value: |
               #!/bin/bash
               sudo apt-get update -y
-              sudo apt-get install nginx -y
-              sudo rm /etc/nginx/sites-enabled/default
-              sudo cat > /etc/nginx/sites-available/jellyfin << 'EOF'
-              server {
-                  listen 80;
-                  server_name _;
-                  location / {
-                      proxy_pass http://10.128.0.63:8096;
-                      proxy_set_header Host $host;
-                      proxy_set_header X-Real-IP $remote_addr;
-                  }
-              }
-              EOF
-              sudo ln -s /etc/nginx/sites-available/jellyfin /etc/nginx/sites-enabled/
-              sudo systemctl restart nginx
+              sudo apt-get install -y git python3 python3-pip
+              git clone https://github.com/MariaAmor8/ReverseProxyGCP.git /home/proxy
+              pip3 install requests
+              nohup python3 /home/proxy/mainProxy.py > /home/proxy/proxy.log 2>&1 &
 
   # App Server (Jellyfin - e2-micro)
   - type: compute.v1.instance

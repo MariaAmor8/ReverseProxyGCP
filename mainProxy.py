@@ -1,39 +1,64 @@
-import uvicorn
-import httpx
-from fastapi import FastAPI, Request
-from fastapi.responses import Response
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import requests
+import socketserver
 
-# Configuración del backend al que el proxy redirige las solicitudes
-BACKEND_URL = "http://10.128.0.63:8080"  # Dirección interna del app-server en GCP
+# Dirección del backend (Jellyfin)
+BACKEND_HOST = '10.128.0.63'
+BACKEND_PORT = 8096
+BACKEND_URL = f'http://{BACKEND_HOST}:{BACKEND_PORT}'
 
-app = FastAPI()
+class ReverseProxyHandler(BaseHTTPRequestHandler):
+    def forward_request(self, method):
+        # URL de destino en el backend
+        target_url = BACKEND_URL + self.path
 
-@app.api_route("/{full_path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])
-async def proxy(full_path: str, request: Request):
-    """ Proxy inverso que redirige las solicitudes a app-server """
-    async with httpx.AsyncClient() as client:
-        url = f"{BACKEND_URL}/{full_path}"
-        headers = dict(request.headers)
+        # Cabeceras originales, con 'Host' y 'X-Real-IP'
+        headers = {key: val for key, val in self.headers.items()}
+        headers['Host'] = self.headers.get('Host', BACKEND_HOST)
+        headers['X-Real-IP'] = self.client_address[0]
 
-        if request.method == "GET":
-            response = await client.get(url, headers=headers)
-        elif request.method == "POST":
-            response = await client.post(url, content=await request.body(), headers=headers)
-        elif request.method == "PUT":
-            response = await client.put(url, content=await request.body(), headers=headers)
-        elif request.method == "DELETE":
-            response = await client.delete(url, headers=headers)
-        elif request.method == "PATCH":
-            response = await client.patch(url, content=await request.body(), headers=headers)
-        elif request.method == "OPTIONS":
-            response = await client.options(url, headers=headers)
-        elif request.method == "HEAD":
-            response = await client.head(url, headers=headers)
-        else:
-            return Response("Método no soportado", status_code=405)
+        # Lee el cuerpo si es necesario
+        body = None
+        if 'Content-Length' in self.headers:
+            content_length = int(self.headers['Content-Length'])
+            body = self.rfile.read(content_length)
 
-        return Response(content=response.content, status_code=response.status_code, headers=dict(response.headers))
+        # Reenvía la solicitud al backend con el mismo método
+        response = requests.request(method, target_url, headers=headers, data=body, stream=True)
 
-if __name__ == "__main__":
-    # Se inicia el proxy en 0.0.0.0 para aceptar tráfico externo
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+        # Enviar respuesta al cliente
+        self.send_response(response.status_code)
+        for key, value in response.headers.items():
+            if key.lower() != 'transfer-encoding':
+                self.send_header(key, value)
+        self.end_headers()
+        self.wfile.write(response.content)
+
+    def do_GET(self):
+        self.forward_request('GET')
+
+    def do_POST(self):
+        self.forward_request('POST')
+
+    def do_PUT(self):
+        self.forward_request('PUT')
+
+    def do_DELETE(self):
+        self.forward_request('DELETE')
+
+    def do_PATCH(self):
+        self.forward_request('PATCH')
+
+    def log_message(self, format, *args):
+        print(f"[{self.log_date_time_string()}] {self.client_address[0]} - {self.command} {self.path}")
+
+def run(port=80):
+    server_address = ('', port)
+    # Usa Threading para permitir múltiples solicitudes simultáneas
+    handler_class = ReverseProxyHandler
+    httpd = socketserver.ThreadingTCPServer(server_address, handler_class)
+    print(f"Proxy reverso escuchando en puerto {port}, redirigiendo a {BACKEND_URL}")
+    httpd.serve_forever()
+
+if __name__ == '__main__':
+    run()
