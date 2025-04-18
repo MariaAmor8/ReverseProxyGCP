@@ -8,57 +8,50 @@
 #    - app-server (Jellyfin)
 
 resources:
-  # Regla de firewall para el proxy (HTTP/HTTPS desde Internet)
+  # Firewall para el proxy (HTTP desde Internet)
   - name: firewall-jellyfin
     type: compute.v1.firewall
     properties:
-      network: global/networks/default
+      network: https://www.googleapis.com/compute/v1/projects/arquisoft-2023-9878/global/networks/default
       priority: 1000
       direction: INGRESS
-      sourceRanges: 
-        - 0.0.0.0/0
-      targetTags:
-        - proxy
+      sourceRanges: ["0.0.0.0/0"]
+      targetTags: ["proxy"]
       allowed:
         - IPProtocol: TCP
-          ports: 
-            - 80   # HTTP
-            - 443  # HTTPS (opcional si añades SSL después)
+          ports: [80]
 
-  # Regla de firewall interno (solo app-server acepta tráfico desde proxy-server)
+  # Firewall interno (solo proxy-server puede acceder a app-server)
   - name: firewall-internal
     type: compute.v1.firewall
     properties:
-      network: global/networks/default
+      network: https://www.googleapis.com/compute/v1/projects/arquisoft-2023-9878/global/networks/default
       priority: 1010
       direction: INGRESS
-      sourceTags:
-        - proxy
-      targetTags:
-        - jellyfin-server
+      sourceTags: ["proxy"]
+      targetTags: ["jellyfin-server"]
       allowed:
         - IPProtocol: TCP
-          ports: 
-            - 8096  # Puerto de Jellyfin
+          ports: [8096]
 
-  # Proxy server (Nginx)
+  # Proxy Server (Nginx - e2-micro)
   - type: compute.v1.instance
     name: proxy-server
     properties:
       zone: us-central1-a
-      machineType: zones/us-central1-a/machineTypes/e2-micro
+      machineType: https://www.googleapis.com/compute/v1/projects/arquisoft-2023-9878/zones/us-central1-a/machineTypes/e2-micro
       tags:
-        items: 
-          - proxy
+        items: ["proxy"]
       disks:
         - deviceName: boot
           type: PERSISTENT
           boot: true
           autoDelete: true
           initializeParams:
-            sourceImage: projects/ubuntu-os-cloud/global/images/ubuntu-2204-jammy-v20240410
+            sourceImage: https://www.googleapis.com/compute/v1/projects/ubuntu-os-cloud/global/images/ubuntu-2004-focal-v20240307b
       networkInterfaces:
-        - network: global/networks/default
+        - network: https://www.googleapis.com/compute/v1/projects/arquisoft-2023-9878/global/networks/default
+        - networkIP: 10.128.0.62
           accessConfigs:
             - name: External NAT
               type: ONE_TO_ONE_NAT
@@ -67,52 +60,41 @@ resources:
           - key: startup-script
             value: |
               #!/bin/bash
-              # Instalar Nginx y configurar como reverse proxy
               sudo apt-get update -y
               sudo apt-get install nginx -y
-              
-              # Crear configuración para Jellyfin
+              sudo rm /etc/nginx/sites-enabled/default
               sudo cat > /etc/nginx/sites-available/jellyfin << 'EOF'
               server {
                   listen 80;
                   server_name _;
-                  
                   location / {
-                      proxy_pass http://10.128.0.63:8096;  # IP interna de app-server
+                      proxy_pass http://10.128.0.63:8096;
                       proxy_set_header Host $host;
                       proxy_set_header X-Real-IP $remote_addr;
                   }
               }
               EOF
-              
-              # Habilitar configuración
               sudo ln -s /etc/nginx/sites-available/jellyfin /etc/nginx/sites-enabled/
               sudo systemctl restart nginx
 
-  # App server (Jellyfin)
+  # App Server (Jellyfin - e2-micro)
   - type: compute.v1.instance
     name: app-server
     properties:
       zone: us-central1-a
-      machineType: zones/us-central1-a/machineTypes/e2-standard-2  # Más RAM para Jellyfin
+      machineType: https://www.googleapis.com/compute/v1/projects/arquisoft-2023-9878/zones/us-central1-a/machineTypes/e2-micro
       tags:
-        items: 
-          - jellyfin-server
+        items: ["jellyfin-server"]
       disks:
         - deviceName: boot
           type: PERSISTENT
           boot: true
           autoDelete: true
           initializeParams:
-            sourceImage: projects/ubuntu-os-cloud/global/images/ubuntu-2204-jammy-v20240410
-        - deviceName: media-disk
-          type: PERSISTENT
-          autoDelete: false
-          initializeParams:
-            diskSizeGb: 50  # Disco adicional para archivos multimedia
+            sourceImage: https://www.googleapis.com/compute/v1/projects/ubuntu-os-cloud/global/images/ubuntu-2004-focal-v20240307b
       networkInterfaces:
-        - network: global/networks/default
-          networkIP: 10.128.0.63  # IP fija para referencia en proxy
+        - network: https://www.googleapis.com/compute/v1/projects/arquisoft-2023-9878/global/networks/default
+          networkIP: 10.128.0.63  # IP fija para el proxy
           accessConfigs:
             - name: External NAT
               type: ONE_TO_ONE_NAT
@@ -121,19 +103,11 @@ resources:
           - key: startup-script
             value: |
               #!/bin/bash
-              # Instalar Jellyfin
               sudo apt-get update -y
               sudo apt-get install curl gnupg -y
               curl -fsSL https://repo.jellyfin.org/ubuntu/jellyfin_team.gpg.key | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/jellyfin.gpg
               echo "deb [arch=$(dpkg --print-architecture)] https://repo.jellyfin.org/ubuntu $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/jellyfin.list
               sudo apt-get update
               sudo apt-get install jellyfin -y
-              
-              # Montar disco adicional para medios (opcional)
-              sudo mkdir -p /mnt/media
-              sudo mount /dev/sdb /mnt/media
-              sudo chown -R jellyfin:jellyfin /mnt/media
-              
-              # Configurar firewall local (solo permitir proxy-server)
-              sudo ufw allow from 10.128.0.62 to any port 8096  # IP interna de proxy-server
+              sudo ufw allow from 10.128.0.62 to any port 8096  # Solo permite proxy-server
               sudo ufw enable
