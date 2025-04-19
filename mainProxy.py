@@ -58,11 +58,6 @@ def before_request():
     # Verificar tamaño del contenido
     if request.content_length and request.content_length > MAX_CONTENT_LENGTH:
         abort(413)
-    
-    # Validar IP (comentar si no se necesita)
-    if not check_ip_allowed(request.remote_addr):
-        logger.warning(f"Acceso denegado desde IP: {request.remote_addr}")
-        abort(403)
 
 # Handlers
 @app.route('/', defaults={'path': ''})
